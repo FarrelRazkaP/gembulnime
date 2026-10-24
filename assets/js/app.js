@@ -46,6 +46,184 @@
     },
   };
 
+  // ---------- Supabase auth + koleksi lintas perangkat ----------
+  const libraryKeys = ["favs", "history", "reminders", "seen", "comic_history", "comic_seen"];
+  const hasSupabaseConfig = Boolean(window.SUPABASE_URL && window.SUPABASE_ANON_KEY && window.supabase?.createClient);
+  const supabase = hasSupabaseConfig ? window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY) : null;
+  let authUser = null;
+  let syncingLibrary = false;
+  let librarySyncTimer;
+  let authMessage = "";
+  let authMessageType = "status";
+
+  const librarySnapshot = () => Object.fromEntries(libraryKeys.map((key) => [key, store.get(key, key.endsWith("seen") ? {} : [])]));
+  const accountLibraryKey = (userId) => `kaze_account_library_${userId}`;
+  function archiveAccountLibrary(userId) {
+    try {
+      localStorage.setItem(accountLibraryKey(userId), JSON.stringify(librarySnapshot()));
+      libraryKeys.forEach((key) => localStorage.setItem(`kaze_${key}`, JSON.stringify(key.endsWith("seen") ? {} : [])));
+    } catch (error) {
+      console.warn("Could not separate the signed-out library from guest storage:", error);
+    }
+  }
+  const mergeLibraryList = (cloud = [], local = [], keyFn) => {
+    const merged = new Map();
+    [...cloud, ...local].forEach((item) => {
+      const key = keyFn(item);
+      if (key != null && key !== "") merged.set(String(key), { ...(merged.get(String(key)) || {}), ...item });
+    });
+    return [...merged.values()].sort((a, b) => (b.ts || 0) - (a.ts || 0)).slice(0, 200);
+  };
+  async function syncLibraryFromCloud() {
+    if (!supabase || !authUser) return;
+    syncingLibrary = true;
+    try {
+      const { data, error } = await supabase.from("user_library").select("data").eq("user_id", authUser.id).maybeSingle();
+      if (error) throw error;
+      const local = librarySnapshot();
+      const cloud = data?.data || {};
+      let accountLocal = {};
+      try { accountLocal = JSON.parse(localStorage.getItem(accountLibraryKey(authUser.id)) || "{}"); } catch { /* Abaikan cache akun yang rusak. */ }
+      const merged = {
+        favs: mergeLibraryList(cloud.favs, accountLocal.favs || [], (x) => x.animeId),
+        history: mergeLibraryList(cloud.history, accountLocal.history || [], (x) => x.animeId || x.episodeId),
+        reminders: mergeLibraryList(cloud.reminders, accountLocal.reminders || [], (x) => x.animeId),
+        comic_history: mergeLibraryList(cloud.comic_history, accountLocal.comic_history || [], (x) => x.slug || x.comicId || x.mangaId || x.chapter || x.chapterId),
+        seen: { ...(cloud.seen || {}), ...(accountLocal.seen || {}) },
+        comic_seen: { ...(cloud.comic_seen || {}), ...(accountLocal.comic_seen || {}) },
+      };
+      // Item guest di perangkat ini ikut digabung saat login; cache akun lain tidak ikut.
+      merged.favs = mergeLibraryList(merged.favs, local.favs, (x) => x.animeId);
+      merged.history = mergeLibraryList(merged.history, local.history, (x) => x.animeId || x.episodeId);
+      merged.reminders = mergeLibraryList(merged.reminders, local.reminders, (x) => x.animeId);
+      merged.comic_history = mergeLibraryList(merged.comic_history, local.comic_history, (x) => x.slug || x.comicId || x.mangaId || x.chapter || x.chapterId);
+      merged.seen = { ...merged.seen, ...(local.seen || {}) };
+      merged.comic_seen = { ...merged.comic_seen, ...(local.comic_seen || {}) };
+      syncingLibrary = false;
+      libraryKeys.forEach((key) => store.set(key, merged[key]));
+      await persistLibrary();
+    } catch (error) {
+      syncingLibrary = false;
+      console.error("Supabase library sync failed:", error);
+      toast("Akun masuk, tetapi koleksi gagal disinkronkan. Coba muat ulang.");
+    }
+  }
+  async function persistLibrary() {
+    if (!supabase || !authUser || syncingLibrary) return;
+    const { error } = await supabase.from("user_library").upsert({ user_id: authUser.id, data: librarySnapshot(), updated_at: new Date().toISOString() }, { onConflict: "user_id" });
+    if (error) throw error;
+  }
+  function queueLibrarySync() {
+    if (!supabase || !authUser || syncingLibrary) return;
+    clearTimeout(librarySyncTimer);
+    librarySyncTimer = setTimeout(() => persistLibrary().catch((error) => {
+      console.error("Supabase library sync failed:", error);
+      toast("Perubahan belum tersinkron. Periksa koneksi lalu coba lagi.");
+    }), 700);
+  }
+  function updateAuthNav() {
+    const link = $("#authNavLink");
+    if (!link) return;
+    link.href = authUser ? "#/account" : "#/login";
+    link.setAttribute("aria-label", authUser ? "Akun" : "Masuk atau buat akun");
+    $("span", link).textContent = authUser ? "Akun" : "Masuk";
+  }
+  function setAuthMessage(message, type = "status") {
+    authMessage = message;
+    authMessageType = type;
+    const output = $("#authMessage", app);
+    if (output) {
+      output.textContent = message;
+      output.dataset.type = type;
+      output.hidden = !message;
+    }
+  }
+  function pageAuth(mode = "login") {
+    if (authUser) { pageAccount(); return; }
+    const heading = mode === "signup" ? "Buat akun" : "Masuk ke akun";
+    app.innerHTML = `<div class="page auth-page"><section class="auth-panel" aria-labelledby="authTitle">
+      <p class="auth-kicker">GEMBUL.NIME</p><h1 class="page-title" id="authTitle">${heading}</h1>
+      <p class="page-desc">${mode === "signup" ? "Satu akun untuk membawa koleksimu ke perangkat lain." : "Masuk untuk melanjutkan koleksi anime dan komikmu."}</p>
+      ${!supabase ? '<p class="auth-setup" role="status">Login belum dikonfigurasi. Tambahkan URL dan publishable key Supabase di <code>assets/js/config.js</code>.</p>' : ""}
+      <form id="authForm" class="auth-form" novalidate>
+        <label for="authEmail">Email</label><input class="field" id="authEmail" name="email" type="email" autocomplete="email" required maxlength="254" placeholder="nama@email.com">
+        <label for="authPassword">Kata sandi</label><input class="field" id="authPassword" name="password" type="password" autocomplete="${mode === "signup" ? "new-password" : "current-password"}" required minlength="8" placeholder="Minimal 8 karakter">
+        <p class="auth-message" id="authMessage" role="${authMessageType === "error" ? "alert" : "status"}" aria-live="polite" data-type="${authMessageType}" ${authMessage ? "" : "hidden"}>${esc(authMessage)}</p>
+        <button class="btn btn-primary auth-submit" type="submit" ${supabase ? "" : "disabled"}>${mode === "signup" ? "Daftar" : "Masuk"}</button>
+      </form>
+      <p class="auth-switch">${mode === "signup" ? "Sudah punya akun?" : "Belum punya akun?"} <button type="button" id="authSwitch">${mode === "signup" ? "Masuk" : "Daftar"}</button></p>
+    </section></div>`;
+    $("#authSwitch", app).onclick = () => { authMessage = ""; location.hash = mode === "signup" ? "#/login" : "#/signup"; };
+    $("#authForm", app).addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const form = event.currentTarget;
+      if (!form.reportValidity()) return;
+      const button = $("button[type=submit]", form);
+      button.disabled = true;
+      button.textContent = "Memproses…";
+      setAuthMessage("");
+      try {
+        const email = form.elements.email.value.trim();
+        const password = form.elements.password.value;
+        const result = mode === "signup"
+          ? await supabase.auth.signUp({ email, password, options: { emailRedirectTo: `${location.origin}${location.pathname}` } })
+          : await supabase.auth.signInWithPassword({ email, password });
+        if (result.error) throw result.error;
+        if (mode === "signup" && !result.data.session) {
+          setAuthMessage("Akun dibuat. Buka tautan konfirmasi yang dikirim ke emailmu, lalu masuk.");
+          button.disabled = false;
+          button.textContent = "Daftar";
+          return;
+        }
+        authMessage = "";
+        location.hash = "#/account";
+      } catch (error) {
+        setAuthMessage(authErrorMessage(error), "error");
+        button.disabled = false;
+        button.textContent = mode === "signup" ? "Daftar" : "Masuk";
+      }
+    });
+  }
+  function authErrorMessage(error) {
+    const message = String(error?.message || "");
+    if (/invalid login credentials/i.test(message)) return "Email atau kata sandi tidak cocok.";
+    if (/already registered|user already exists/i.test(message)) return "Email ini sudah terdaftar. Silakan masuk.";
+    if (/password should be at least/i.test(message)) return "Kata sandi harus terdiri dari minimal 8 karakter.";
+    if (/email not confirmed/i.test(message)) return "Konfirmasi emailmu sebelum masuk.";
+    return message || "Terjadi kendala. Coba lagi sebentar.";
+  }
+  function pageAccount() {
+    if (!authUser) { location.hash = "#/login"; return; }
+    app.innerHTML = `<div class="page auth-page"><section class="auth-panel account-panel" aria-labelledby="authTitle">
+      <p class="auth-kicker">AKUN GEMBUL.NIME</p><h1 class="page-title" id="authTitle">Akun <span class="hl">kamu</span></h1>
+      <p class="page-desc">Masuk sebagai <strong>${esc(authUser.email || "")}</strong></p>
+      <p class="auth-account-note">Koleksi tersinkron ke akun Supabase ini. Kamu bisa membuka koleksi yang sama di perangkat lain.</p>
+      <a class="btn btn-secondary auth-submit" href="#/library">Buka koleksi</a>
+      <button class="btn btn-quiet auth-logout" id="authLogout" type="button">Keluar dari akun</button>
+    </section></div>`;
+    $("#authLogout", app).onclick = async (event) => {
+      const button = event.currentTarget;
+      button.disabled = true;
+      try {
+        await persistLibrary();
+        const { error } = await supabase.auth.signOut();
+        if (error) throw error;
+        location.hash = "#/login";
+      } catch (error) {
+        console.error("Supabase sign out failed:", error);
+        button.disabled = false;
+        toast("Gagal keluar. Periksa koneksi lalu coba lagi.");
+      }
+    };
+  }
+  if (store.set) {
+    const originalStoreSet = store.set;
+    store.set = (key, value) => {
+      originalStoreSet(key, value);
+      if (libraryKeys.includes(key)) queueLibrarySync();
+    };
+  }
+
   // toast dengan aksi opsional (mis. "Urungkan")
   const toastEl = $("#toast");
   function toast(msg, action) {
@@ -2173,7 +2351,7 @@
     }
     app.innerHTML = `
       <div class="page">
-        <div class="page-head"><div><h1 class="page-title">Koleksi <span class="hl">kamu</span></h1><p class="page-desc">Tersimpan di browser ini saja.</p></div>
+        <div class="page-head"><div><h1 class="page-title">Koleksi <span class="hl">kamu</span></h1><p class="page-desc">${authUser ? `Tersinkron ke akun ${esc(authUser.email || "Supabase")}.` : 'Tersimpan di browser ini saja. <a href="#/login">Masuk</a> untuk menyinkronkan koleksi lintas perangkat.'}</p></div>
           ${tab === "history" && h.length ? '<button class="btn btn-quiet btn-sm" id="clearHist">Hapus semua riwayat</button>' : ""}</div>
         <div class="seg" role="tablist" aria-label="Koleksi">
           <button role="tab" aria-selected="${tab === "favs"}" data-t="favs">Favorit <span class="n">${f.length}</span></button>
@@ -2940,6 +3118,9 @@
       else if (key === "comic" && parts[1] === "d" && parts[2]) await pageComicDetail(parts[2]);
       else if (key === "comic" && parts[1] === "read" && parts[2]) await pageComicRead(parts[2]);
       else if (key === "library") pageLibrary(params.get("tab") === "history" ? "history" : "favs");
+      else if (key === "login") pageAuth("login");
+      else if (key === "signup") pageAuth("signup");
+      else if (key === "account") pageAccount();
       else app.innerHTML = `<div class="page">${emptyBox("Halaman tidak ditemukan", "Link-nya mungkin salah ketik.", '<a class="btn btn-primary btn-sm" href="#/">Ke beranda</a>')}</div>`;
     } catch (e) {
       console.error(e);
@@ -3274,6 +3455,32 @@
     };
   }
 
+  updateAuthNav();
   checkReminders();
-  route();
+  if (supabase) {
+    let previousUserId = null;
+    supabase.auth.onAuthStateChange((event, session) => {
+      const nextUser = session?.user || null;
+      const nextUserId = nextUser?.id || null;
+      if (previousUserId && previousUserId !== nextUserId) archiveAccountLibrary(previousUserId);
+      authUser = nextUser;
+      updateAuthNav();
+      if (nextUserId && nextUserId !== previousUserId) setTimeout(() => syncLibraryFromCloud(), 0);
+      previousUserId = nextUserId;
+    });
+    supabase.auth.getSession().then(({ data, error }) => {
+      if (error) throw error;
+      authUser = data.session?.user || null;
+      previousUserId = authUser?.id || null;
+      updateAuthNav();
+      route();
+    }).catch((error) => {
+      console.error("Supabase session initialization failed:", error);
+      authUser = null;
+      updateAuthNav();
+      route();
+    });
+  } else {
+    route();
+  }
 })();

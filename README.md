@@ -9,6 +9,17 @@ npm run setup   # install dependensi API (sekali saja)
 npm start       # API di :3001 + website di http://localhost:5173
 ```
 
+## Akun Supabase
+
+Login, daftar akun, dan sinkronisasi koleksi memerlukan proyek Supabase:
+
+1. Buat proyek Supabase dan aktifkan provider **Email** di Authentication > Providers.
+2. Salin Project URL dan publishable (anon) key dari Project Settings > API ke `SUPABASE_URL` dan `SUPABASE_ANON_KEY` di `assets/js/config.js`. Key tersebut memang digunakan di browser; jangan pernah menaruh `service_role` key di sana.
+3. Jalankan `supabase/schema.sql` sekali lewat Supabase Dashboard > SQL Editor. Kebijakan RLS membatasi setiap baris koleksi ke pemilik akun.
+4. Tambahkan URL situs lokal dan URL situs produksi di Authentication > URL Configuration > Redirect URLs agar tautan verifikasi email dapat kembali ke situs.
+
+Tanpa URL/key Supabase dan tabel tersebut, formulir login sengaja dinonaktifkan. Koleksi yang belum masuk akun tetap tersimpan lokal; saat login pertama, item lokal dan koleksi akun digabung.
+
 ## Fitur
 
 - Data AniList dicari pakai judul Jepang dulu, lalu judul biasa / tanpa "Season N" / sebelum ":" (ejaan Otakudesu sering beda). Kalau satu trailer menolak di-embed, trailer cadangan dicoba. Disimpan 12 jam di browser

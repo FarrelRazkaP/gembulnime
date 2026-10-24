@@ -13,7 +13,7 @@
   <link
     href="https://fonts.googleapis.com/css2?family=Unbounded:wght@600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"
     rel="stylesheet" />
-  <link rel="stylesheet" href="assets/css/style.css?v=32" />
+  <link rel="stylesheet" href="assets/css/style.css?v=33" />
   <link rel="icon"
     href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='10' fill='%23000'/><text x='16' y='22' font-size='18' text-anchor='middle' fill='%23fff' font-family='Arial,sans-serif' font-weight='800'>✦</text></svg>" />
 </head>
@@ -75,7 +75,7 @@
           <circle cx="12" cy="19" r="1.8"/>
         </svg>
       </button>
-      <a href="#/library" class="nav-signin-btn" aria-label="Masuk atau akun koleksi">
+      <a href="#/login" class="nav-signin-btn" id="authNavLink" aria-label="Masuk atau akun koleksi">
         <svg viewBox="0 0 24 24" aria-hidden="true" fill="currentColor">
           <path d="M12 2a5 5 0 1 0 5 5 5 5 0 0 0-5-5zm0 12c-5.33 0-8 2.67-8 4v2h16v-2c0-1.33-2.67-4-8-4z"/>
         </svg>
@@ -164,8 +164,9 @@
   </button>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-  <script src="assets/js/config.js?v=15"></script>
-  <script src="assets/js/app.js?v=32"></script>
+  <script src="assets/js/config.js?v=16"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="assets/js/app.js?v=33"></script>
 </body>
 
 </html>
