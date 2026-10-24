@@ -436,7 +436,7 @@ a.chip:hover { color: #ffffff; border-color: rgba(255, 255, 255, 0.35); backgrou
   grid-auto-columns: calc((100% - (var(--row-cols) - 1) * 16px) / var(--row-cols));
   gap: 16px;
   overflow: hidden !important;
-  overscroll-behavior: none;
+  overscroll-behavior: auto;
   scroll-behavior: auto;
   padding: 4px 2px 14px;
   cursor: default;
@@ -615,7 +615,7 @@ a.chip:hover { color: #ffffff; border-color: rgba(255, 255, 255, 0.35); backgrou
   grid-auto-columns: calc((100% - (var(--continue-cols) - 1) * 18px) / var(--continue-cols));
   gap: 18px;
   overflow: hidden !important;
-  overscroll-behavior: none;
+  overscroll-behavior: auto;
   scroll-behavior: auto;
   padding: 8px 2px 22px;
   scrollbar-width: none !important;

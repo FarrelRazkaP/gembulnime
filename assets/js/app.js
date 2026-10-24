@@ -875,12 +875,62 @@
       const list = (data.recent?.animeList || []).filter((a) => a.episodeId);
       if (!el.isConnected) return;
       if (!list.length) return el.remove();
-      // tanpa animeId di kartu: poster di sini cuplikan episode, jangan masuk cache poster seri
-      el.innerHTML = row("Rilis terbaru di Samehadaku", list.map((a) => card(
-        { title: a.title, poster: a.poster },
-        { href: `#/op/watch/${enc(a.episodeId)}`, epLabel: a.episodes, foot: [a.releasedOn].filter(Boolean), sub: "Samehadaku" },
-      )).join(""), { count: list.length });
+
+      // Cek poster resmi dari cache terlebih dahulu
+      const getAnimePoster = (a) => getPoster("op:" + a.animeId) || getPoster(a.animeId);
+
+      // Ambil poster anime resmi untuk item awal yang belum tersimpan di cache
+      const missing = list.slice(0, 8).filter((a) => a.animeId && !getAnimePoster(a));
+      if (missing.length) {
+        await Promise.race([
+          Promise.allSettled(missing.map(async (a) => {
+            try {
+              const r = await api(`/anime/${enc(a.animeId)}`, { base: OP_API, quiet: true });
+              const p = r?.data?.poster;
+              if (p) {
+                setPoster("op:" + a.animeId, p);
+                setPoster(a.animeId, p);
+              }
+            } catch {}
+          })),
+          new Promise((resolve) => setTimeout(resolve, 3000)),
+        ]);
+      }
+
+      if (!el.isConnected) return;
+
+      // Render kartu dengan poster anime resmi portrait
+      el.innerHTML = row("Rilis terbaru di Samehadaku", list.map((a) => {
+        const posterUrl = getAnimePoster(a) || a.poster;
+        return card(
+          { title: a.title, poster: posterUrl },
+          { href: `#/op/watch/${enc(a.episodeId)}`, epLabel: a.episodes, foot: [a.releasedOn].filter(Boolean), sub: "Samehadaku" },
+        );
+      }).join(""), { count: list.length });
       hydrate(el);
+
+      // Sisa item selanjutnya atau yang tertunda di-cache di latar belakang dan diperbarui gambarnya
+      const rest = list.filter((a) => a.animeId && !getAnimePoster(a));
+      if (rest.length) {
+        Promise.allSettled(rest.map(async (a) => {
+          try {
+            const r = await api(`/anime/${enc(a.animeId)}`, { base: OP_API, quiet: true });
+            const p = r?.data?.poster;
+            if (p) {
+              setPoster("op:" + a.animeId, p);
+              setPoster(a.animeId, p);
+              const cardEl = el.querySelector(`a[href*="${enc(a.episodeId)}"]`);
+              if (cardEl) {
+                const img = $("img", cardEl);
+                if (img && img.dataset.src !== p) {
+                  img.src = p;
+                  img.dataset.src = p;
+                }
+              }
+            }
+          } catch {}
+        }));
+      }
     } catch { el.remove(); }
   }
 
@@ -1152,23 +1202,6 @@
     container.addEventListener("mouseleave", () => { isPaused = false; });
     container.addEventListener("touchstart", () => { isPaused = true; }, { passive: true });
     container.addEventListener("touchend", () => { isPaused = false; }, { passive: true });
-
-    // Dukung juga scroll roda mouse pada baris genre jika diarahkan
-    container.addEventListener("wheel", (e) => {
-      if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
-        e.preventDefault();
-        posXLeft -= e.deltaY * 0.7;
-        posXRight += e.deltaY * 0.7;
-        const wL = getGroupWidth(trackLeft);
-        const wR = getGroupWidth(trackRight);
-        while (posXLeft <= -wL) posXLeft += wL;
-        while (posXLeft > 0) posXLeft -= wL;
-        while (posXRight >= 0) posXRight -= wR;
-        while (posXRight < -wR) posXRight += wR;
-        trackLeft.style.transform = `translate3d(${posXLeft}px, 0, 0)`;
-        trackRight.style.transform = `translate3d(${posXRight}px, 0, 0)`;
-      }
-    }, { passive: false });
 
     let lastTime = performance.now();
     const speed = 40; // pixel per detik
