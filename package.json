@@ -2,10 +2,11 @@
   "name": "gembulnime",
   "version": "1.0.0",
   "private": true,
-  "description": "Website nonton anime sub Indo, data dari wajik-anime-api",
+  "description": "Website nonton anime sub Indo dengan UI modern",
   "type": "module",
   "scripts": {
     "start": "node start.js",
-    "setup": "npm --prefix api install"
+    "deploy:vercel": "npx vercel --prod",
+    "deploy:cloudflare": "npx wrangler pages deploy . --project-name gembulnime"
   }
 }
