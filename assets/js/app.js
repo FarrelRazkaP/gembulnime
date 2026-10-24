@@ -347,24 +347,15 @@
   // ---------- library (history / favorit / pengingat / sudah ditonton) ----------
   const lib = {
     history: () => {
-      const h = store.get("history", null);
-      if (h === null) {
-        const sample = [
-          {
-            animeId: "komisan-sub-indo",
-            episodeId: "komisan-episode-12-sub-indo",
-            title: "Komi Can't Communicate",
-            epLabel: "12",
-            poster: "https://otakudesu.blog/wp-content/uploads/2021/09/Komi-san-Sub-Indo.jpg",
-            banner: "https://s4.anilist.co/file/anilistcdn/media/anime/banner/142984-RwLgGjgBrCsF.jpg",
-            progress: 96,
-            ts: Date.now() - 3600000,
-          }
-        ];
-        store.set("history", sample);
-        return sample;
-      }
-      return h;
+      const h = store.get("history", []);
+      if (!Array.isArray(h)) return [];
+      const cleaned = h.filter((x) => !(x.animeId === "komisan-sub-indo"
+        && x.episodeId === "komisan-episode-12-sub-indo"
+        && x.title === "Komi Can't Communicate"
+        && x.progress === 96
+        && x.poster === "https://otakudesu.blog/wp-content/uploads/2021/09/Komi-san-Sub-Indo.jpg"));
+      if (cleaned.length !== h.length) store.set("history", cleaned);
+      return cleaned;
     },
     favs: () => store.get("favs", []),
     seen: () => store.get("seen", {}),
