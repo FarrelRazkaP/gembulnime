@@ -270,9 +270,20 @@
     if (cache.has(key)) return cache.get(key);
     if (!quiet) loadStart();
     const p = fetch(key)
-      .then((r) => r.json())
+      .then(async (r) => {
+        let j = await r.json();
+        if (j.status === "Too Many Requests" || j.message?.includes("temporarily blocked")) {
+          console.warn("[API] Rate limit Sanka terdeteksi, mencoba ulang setelah jeda...");
+          await new Promise((res) => setTimeout(res, 1200));
+          const r2 = await fetch(key);
+          j = await r2.json();
+        }
+        return j;
+      })
       .then((j) => {
-        if (j.statusCode && j.statusCode >= 400) throw new Error(j.message || j.statusMessage || `Error ${j.statusCode}`);
+        if (j.statusCode && j.statusCode >= 400 && j.statusCode !== 404) {
+          throw new Error(j.message || j.statusMessage || `Error ${j.statusCode}`);
+        }
         return j;
       })
       .finally(() => { if (!quiet) loadEnd(); });
@@ -2063,7 +2074,24 @@
 
   async function pageWatch(epId) {
     app.innerHTML = `<div class="page"><div class="watch"><div><div class="player"><div class="player-msg"><div><div class="spinner"></div>Memuat episode…</div></div></div><div class="sk" style="height:28px;width:60%;margin-top:20px"></div></div><div class="sk" style="height:320px;border-radius:16px"></div></div></div>`;
-    const { data } = await api(`/episode/${enc(epId)}`);
+    const res = await api(`/episode/${enc(epId)}`);
+    const data = res?.data;
+    if (!data) {
+      const cleanName = epId.replace(/-episode.*$/i, "").replace(/-/g, " ");
+      app.innerHTML = `
+        <div class="page">
+          <div class="empty">
+            <div class="glyph" aria-hidden="true">⚠️</div>
+            <h3>Video Episode Belum Tersedia di Otakudesu</h3>
+            <p class="page-desc">Episode ini sedang dalam tahap pembaruan atau belum diunggah oleh server Otakudesu. Silakan coba tonton di server Samehadaku atau kembali ke daftar episode.</p>
+            <div class="actions">
+              <a class="btn btn-primary btn-sm" href="#/op/search?q=${enc(cleanName)}">Cari di Samehadaku</a>
+              <button class="btn btn-secondary btn-sm" onclick="history.back()">Kembali</button>
+            </div>
+          </div>
+        </div>`;
+      return;
+    }
     const d = data.details || data;
     let anime = null;
     try { if (d.animeId) anime = await detailOf(d.animeId); } catch { /* poster opsional */ }
@@ -2181,7 +2209,7 @@
     const player = $("#player");
     const frame = (url) => {
       const src = cleanEmbedUrl(url);
-      return `<iframe src="${esc(src)}" title="Pemutar ${esc(animeTitle)} episode ${esc(label)}" allowfullscreen allow="autoplay; fullscreen; encrypted-media; picture-in-picture" referrerpolicy="no-referrer" sandbox="allow-scripts allow-same-origin allow-forms allow-presentation"></iframe>`;
+      return `<iframe src="${esc(src)}" title="Pemutar ${esc(animeTitle)} episode ${esc(label)}" allowfullscreen allow="autoplay; fullscreen; encrypted-media; picture-in-picture; web-share" referrerpolicy="no-referrer" sandbox="allow-scripts allow-same-origin allow-forms allow-presentation"></iframe>`;
     };
     const srvButtons = $$(".srv", app);
     const playServer = async (b) => {
@@ -2190,13 +2218,13 @@
       if (b.dataset.role === "default") {
         const url = b.dataset.url;
         if (!url) {
-          player.innerHTML = `<div class="player-msg"><div>Server Utama tidak tersedia. Pilih server lain di bawah.</div></div>`;
-          return;
+          b.classList.add("dead");
+          return false;
         }
         player.innerHTML = frame(url);
         store.set("server", "default");
         if (!$(".ok", b)) b.insertAdjacentHTML("afterbegin", '<span class="ok" aria-hidden="true"></span>');
-        return;
+        return true;
       }
       try {
         const r = await api(`/server/${enc(b.dataset.id)}`);
@@ -2207,18 +2235,14 @@
         player.innerHTML = frame(url);
         store.set("server", b.dataset.name);
         if (!$(".ok", b)) b.insertAdjacentHTML("afterbegin", '<span class="ok" aria-hidden="true"></span>');
+        return true;
       } catch {
         b.classList.add("dead");
         b.title = "Server ini sedang tidak dapat dimuat";
-        player.innerHTML = `<div class="player-msg"><div>Server <b>${esc(b.dataset.name)}</b> sedang error atau offline.<br>${hasDefault ? `<button class="btn btn-primary btn-sm" id="fallbackDef" style="margin-top:10px">Putar Server Utama (Bawaan)</button>` : "Silakan pilih server lain di bawah."}</div></div>`;
-        $("#fallbackDef")?.addEventListener("click", () => {
-          const defBtn = $('[data-role="default"]', app);
-          if (defBtn) playServer(defBtn);
-          else if (d.defaultStreamingUrl) player.innerHTML = frame(d.defaultStreamingUrl);
-        });
+        return false;
       }
     };
-    // Bersihkan preferensi jika sebelumnya tersimpan vidhide
+
     let pref = store.get("server", "");
     if (pref && /vidhide/i.test(pref)) {
       pref = "";
@@ -2227,26 +2251,45 @@
     const srvRank = (name) => {
       const n = String(name).trim().toLowerCase();
       if (pref && (n === pref.toLowerCase() || (pref === "default" && (n === "server utama" || n.includes("utama"))))) return -1;
-      if (/odstream|ondesu|desu|otakuwatch/i.test(n)) return 1;
+      // 1. Direct stream archive/odcloud (paling stabil & no-ad)
+      if (/odstream/i.test(n)) return 1;
       if (/odcdn/i.test(n)) return 2;
-      if (n.includes("utama") || n.includes("bawaan")) return 3;
+      if (/ondesu/i.test(n)) return 3;
+      // 2. Mega (sangat stabil & ad-free)
       if (/mega/i.test(n)) return 4;
-      if (/blogs|blogger/i.test(n)) return 5;
-      if (/filedon|filelions|mp4load|pdrain|kraken/i.test(n)) return 6;
-      if (/vidhide/i.test(n)) return 90;
-      return 30;
+      if (/filedon|filelions|mp4load|pdrain|kraken/i.test(n)) return 5;
+      if (n.includes("utama") || n.includes("bawaan")) return 6;
+      if (/blogs|blogger/i.test(n)) return 7;
+      if (/otakuwatch/i.test(n)) return 8;
+      if (/vidhide/i.test(n)) return 15;
+      return 20;
     };
-    srvButtons.forEach((b) => (b.onclick = () => playServer(b)));
-    // Otomatis pilih server kualitas tertinggi yang bebas iklan
-    const pick = [...srvButtons].sort((a, b) => srvRank(a.dataset.name) - srvRank(b.dataset.name))[0];
-    if (pick && srvRank(pick.dataset.name) < 90) playServer(pick);
-    else if (d.defaultStreamingUrl) {
-      const defBtn = $('[data-role="default"]', app);
-      if (defBtn) playServer(defBtn);
-      else player.innerHTML = frame(d.defaultStreamingUrl);
-    } else if (pick) {
-      playServer(pick);
-    }
+
+    // Auto-fallback: coba server dari urutan terbaik hingga berhasil
+    const tryPlayBestServer = async () => {
+      const sorted = [...srvButtons].sort((a, b) => srvRank(a.dataset.name) - srvRank(b.dataset.name));
+      for (const btn of sorted) {
+        if (btn.classList.contains("dead")) continue;
+        const ok = await playServer(btn);
+        if (ok) return true;
+      }
+      if (hasDefault && d.defaultStreamingUrl) {
+        player.innerHTML = frame(d.defaultStreamingUrl);
+        return true;
+      }
+      player.innerHTML = `<div class="player-msg"><div>Semua server video di Otakudesu sedang tidak dapat dimuat.<br><br><a class="btn btn-primary btn-sm" href="#/op/search?q=${enc(animeTitle)}">Coba Tonton di Samehadaku</a></div></div>`;
+      return false;
+    };
+
+    srvButtons.forEach((b) => (b.onclick = async () => {
+      const ok = await playServer(b);
+      if (!ok) {
+        toast(`Server ${b.dataset.name} sedang tidak dapat diakses. Mencoba server lain...`);
+        tryPlayBestServer();
+      }
+    }));
+
+    tryPlayBestServer();
 
     const toggleCinema = (on) => document.body.classList.toggle("cinema", on);
     $("#cinema").onclick = () => toggleCinema(true);

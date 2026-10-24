@@ -20,7 +20,7 @@ const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,
 
 async function desuProxy(url, res) {
   const target = url.searchParams.get("url") || "";
-  if (!target || !/^https?:\/\/[a-z0-9.-]*desustream\.[a-z0-9]+/i.test(target)) {
+  if (!target || !/^https?:\/\/[a-z0-9.-]*(desustream|desu\.stream|otakuwatch)\.[a-z0-9]+/i.test(target)) {
     res.writeHead(400, { "Content-Type": "text/plain; charset=utf-8" }).end("URL desustream tidak valid");
     return;
   }
@@ -28,7 +28,7 @@ async function desuProxy(url, res) {
     const upstream = await fetch(target, {
       headers: {
         "User-Agent": UA,
-        "Referer": "https://otakudesu.cloud/",
+        "Referer": "https://otakudesu.blog/",
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
       },
       signal: AbortSignal.timeout(15000),

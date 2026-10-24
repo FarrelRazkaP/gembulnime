@@ -5,7 +5,7 @@ export async function onRequest(context) {
   const url = new URL(context.request.url);
   const target = url.searchParams.get("url") || "";
 
-  if (!target || !/^https?:\/\/[a-z0-9.-]*desustream\.[a-z0-9]+/i.test(target)) {
+  if (!target || !/^https?:\/\/[a-z0-9.-]*(desustream|desu\.stream|otakuwatch)\.[a-z0-9]+/i.test(target)) {
     return new Response("URL desustream tidak valid", { status: 400 });
   }
 
@@ -13,7 +13,7 @@ export async function onRequest(context) {
     const upstream = await fetch(target, {
       headers: {
         "User-Agent": UA,
-        "Referer": "https://otakudesu.cloud/",
+        "Referer": "https://otakudesu.blog/",
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
       },
     });
