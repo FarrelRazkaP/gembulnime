@@ -495,40 +495,6 @@
       : inner;
   }
 
-  function rankCard(a, rank) {
-    if (a.animeId && a.poster) setPoster(a.animeId, a.poster);
-    const score = cleanScore(a.score);
-    const ep = a.episodes && a.episodes !== "Unknown" ? `EP ${a.episodes}` : "";
-    const href = animeHref(a.animeId);
-    const peekable = a.animeId && !isOp(a.animeId);
-    const rankClass = rank === 1 ? "rank-1" : rank === 2 ? "rank-2" : rank === 3 ? "rank-3" : "";
-    const rankBadge = rank <= 3 ? "badge-rank-top" : "badge-rank";
-
-    return `
-      <div class="rank-card-wrap">
-        <span class="rank-number ${rankClass}">${rank}</span>
-        <div class="rank-card">
-          <a class="card" href="${href}"${peekable ? ` data-anime="${esc(a.animeId)}"` : ""}>
-            <div class="card-img">
-              <img data-src="${esc(a.poster)}" alt="" loading="lazy" referrerpolicy="no-referrer" />
-              <div class="card-top">
-                <span class="badge ${rankBadge}">#${rank} TRENDING</span>
-                ${score && score !== "0" ? `<span class="badge star">★ ${esc(score)}</span>` : ""}
-              </div>
-              <span class="card-play">${icon.play}</span>
-              <div class="card-overlay">
-                <div class="card-title">${esc(cleanTitle(a.title))}</div>
-                <div class="card-meta">
-                  <span class="card-genre">${esc(a.releaseDay || (isOp(a.animeId) ? "Samehadaku" : "Top Anime"))}</span>
-                  ${ep ? `<span class="card-ep-sub"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-1px;margin-right:2px"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M7 12h3M14 12h3"/></svg>${esc(ep)}</span>` : ""}
-                </div>
-              </div>
-            </div>
-          </a>
-        </div>
-      </div>`;
-  }
-
   function continueCard(h) {
     const title = cleanTitle(h.title);
     const ep = h.epLabel || "1";
@@ -732,51 +698,6 @@
   }
   const nextLabel = (next) => (next && untilText(next.airingAt) ? `EP ${next.episode} tayang di Jepang ${untilText(next.airingAt)} lagi` : "");
 
-  let tickerTimer = null;
-  function initLiveTicker() {
-    if (tickerTimer) clearInterval(tickerTimer);
-    const watchEl = document.getElementById("tickerWatchCount");
-    const onlineEl = document.getElementById("tickerOnlineCount");
-    const chatterEl = document.getElementById("tickerChatter");
-    if (!watchEl && !chatterEl) return;
-
-    const chatters = [
-      '"Solo Leveling ep barunya gokil parah!!"',
-      '"Gembulnime servernya cepet banget no buffering 🔥"',
-      '"Jujutsu Kaisen season baru kapan rilis ya?"',
-      '"Kualitas 1080p jernih banget mantap"',
-      '"Nonton One Piece mingguan paling nyaman di sini"',
-      '"Desain barunya keren parah kayak Netflix & ani.pm! ✦"',
-      '"Bleach TYBW visualnya bener-bener gila animation-nya"',
-      '"Fitur acak anime ngebantu banget pas bingung mau nonton apa 🎲"'
-    ];
-    let chatIdx = 0;
-
-    tickerTimer = setInterval(() => {
-      if (watchEl) {
-        let cur = parseInt(watchEl.textContent.replace(/[^0-9]/g, "")) || 14824;
-        cur += Math.floor(Math.random() * 21) - 10;
-        watchEl.textContent = cur.toLocaleString("en-US");
-      }
-      if (onlineEl) {
-        let curOn = parseInt(onlineEl.textContent.replace(/[^0-9]/g, "")) || 59776;
-        curOn += Math.floor(Math.random() * 31) - 15;
-        onlineEl.textContent = curOn.toLocaleString("en-US");
-      }
-      if (chatterEl) {
-        chatIdx = (chatIdx + 1) % chatters.length;
-        chatterEl.style.opacity = "0";
-        chatterEl.style.transform = "translateY(5px)";
-        chatterEl.style.transition = "all 0.3s ease";
-        setTimeout(() => {
-          chatterEl.innerHTML = `<span style="margin-right:2px">💬</span> ${esc(chatters[chatIdx])}`;
-          chatterEl.style.opacity = "1";
-          chatterEl.style.transform = "translateY(0)";
-        }, 300);
-      }
-    }, 4500);
-  }
-
   async function pageHome() {
     app.innerHTML = `
       <section class="hero"><div class="hero-main"><div class="hero-copy">
@@ -790,7 +711,6 @@
     const { data } = await api("/home");
     const ongoing = data.ongoing?.animeList || [];
     const completed = data.completed?.animeList || [];
-    const top10 = [...ongoing, ...completed].slice(0, 10);
     const history = lib.history();
     const favIds = new Set(lib.favs().map((f) => f.animeId));
     const today = todayName();
@@ -820,19 +740,14 @@
         </div>
       </section>
 
-      <div class="live-ticker-wrap">
-        <div class="live-ticker" id="liveTickerBar">
-          <span class="ticker-item"><span class="pulse-dot"></span> <b id="tickerWatchCount">14,824</b> Menonton</span>
-          <span class="ticker-sep">|</span>
-          <span class="ticker-item"><b id="tickerOnlineCount">59,776</b> Online</span>
-          <span class="ticker-sep">|</span>
-          <span class="ticker-item" id="tickerChatter"><span style="margin-right:2px">💬</span> "Solo Leveling ep barunya gokil parah!!"</span>
-          <span class="ticker-sep">|</span>
-          <span class="ticker-item">🔖 Bookmark <b>gembulnime</b></span>
-        </div>
-      </div>
-
       <div class="body">
+        <nav class="home-shortcuts" aria-label="Jelajahi Gembulnime">
+          <a class="home-shortcut" href="#/ongoing"><span>Anime</span><strong>Sedang tayang</strong><small>Ikuti episode terbaru</small></a>
+          <a class="home-shortcut" href="#/schedule"><span>Kalender</span><strong>Jadwal rilis</strong><small>Lihat hari tayang</small></a>
+          <a class="home-shortcut" href="#/completed"><span>Koleksi</span><strong>Sudah tamat</strong><small>Tonton sampai selesai</small></a>
+          <a class="home-shortcut" href="#/comic"><span>Bacaan</span><strong>Jelajahi komik</strong><small>Manga dan manhwa</small></a>
+        </nav>
+
         ${history.length ? `
         <section class="section section-continue" id="secContinue">
           <div class="sec-head">
@@ -848,19 +763,6 @@
           </div>
           <div class="row row-continue">${history.slice(0, 10).map((h) => continueCard(h)).join("")}</div>
         </section>` : ""}
-
-        <section class="section" id="top10Section">
-          <div class="sec-head">
-            <div>
-              <h2 class="sec-title" style="display:flex;align-items:center;gap:10px;">
-                <span>🏆 Top 10 Terpopuler</span>
-                <span class="badge" style="background:linear-gradient(135deg, #ffd700, #ff8800);color:#000;font-weight:800;border:none;">MINGGU INI</span>
-              </h2>
-              <p class="sec-sub" style="color:var(--text-3);font-size:13.5px;margin-top:2px;">Anime paling banyak ditonton minggu ini oleh komunitas Gembulnime</p>
-            </div>
-          </div>
-          <div class="row row-top10">${top10.map((a, i) => rankCard(a, i + 1)).join("")}</div>
-        </section>
 
         <div class="split">
           <div>${row("Lagi tayang", ongoing.map((a) => card(a)).join(""), { link: "#/ongoing", count: ongoing.length })}</div>
@@ -881,7 +783,6 @@
       </div>`;
     hydrate();
     startHero(heroes);
-    initLiveTicker();
     loadGenreStrip();
     loadOpLatest();
     if (history.length) repairHistory();
@@ -1008,6 +909,7 @@
       poster.href = `#/anime/${enc(a.animeId)}`;
       $("img", poster).src = a.poster;
       copy.innerHTML = `
+        <p class="hero-kicker">Anime pilihan</p>
         <h1 class="hero-title">${esc(cleanTitle(a.title))}</h1>
         <div class="meta" data-meta>
           ${a.score ? `<span class="chip score">★ ${esc(cleanScore(a.score))}</span>` : ""}
@@ -3479,3 +3381,4 @@
     route();
   }
 })();
+
