@@ -1,6 +1,3 @@
-Warning: truncated output (original token count: 45462)
-Total output lines: 3485
-
 (() => {
   "use strict";
 
@@ -1588,7 +1585,430 @@ Total output lines: 3485
             <h1 class="page-title">${pageTitle}</h1>
             <p class="page-desc" id="genreResultDesc">${pageDesc}</p>
           </div>
-          <div class="actions">…5462 tokens truncated…: { label: "Urungkan", fn: () => { lib.setFav(meta, true); setFavUI(true); } });
+          <div class="actions">
+            <a class="btn btn-secondary btn-sm" href="#/genres">Pilih genre lain</a>
+          </div>
+        </div>
+
+        <div class="genre-filter-panel" id="genreFilterPanel">
+          <div class="genre-filter-top">
+            <div class="genre-pills-list">
+              <span style="font-size:13px;font-weight:700;color:var(--text-3);margin-right:4px">Genre aktif:</span>
+              ${activeGenres.map((g) => `
+                <span class="active-genre-pill">
+                  ${esc(g.title)}
+                  <button type="button" data-remove-id="${esc(g.genreId)}" title="Hapus genre ${esc(g.title)}" aria-label="Hapus genre ${esc(g.title)}">×</button>
+                </span>
+              `).join("")}
+              <button type="button" class="btn btn-secondary btn-sm" id="toggleAddGenreBtn" style="height:32px;gap:6px">
+                ${icon.plus} Tambah Genre
+              </button>
+            </div>
+            ${isMulti ? `
+              <div class="genre-mode-toggle" role="group" aria-label="Mode kecocokan">
+                <button type="button" class="genre-mode-btn ${mode === "and" ? "on" : ""}" data-set-mode="and" title="Harus memiliki semua genre">Semua (AND)</button>
+                <button type="button" class="genre-mode-btn ${mode === "or" ? "on" : ""}" data-set-mode="or" title="Cukup salah satu genre">Salah Satu (OR)</button>
+              </div>` : ""
+            }
+          </div>
+          <div class="genre-picker-drawer" id="genrePickerDrawer" hidden>
+            <span style="font-size:12.5px;font-weight:700;color:var(--text-3)">Pilih genre untuk digabungkan:</span>
+            <div class="genre-picker-chips">
+              ${genreListAll.map((g) => {
+                const inUse = activeGenres.some((x) => x.genreId === g.genreId);
+                return `<button type="button" class="genre-add-chip${inUse ? " in-use" : ""}" data-add-id="${esc(g.genreId)}">${esc(g.title)}</button>`;
+              }).join("")}
+            </div>
+          </div>
+        </div>
+
+        <div class="grid">${skCards(18)}</div>
+      </div>`;
+
+    // Event handlers untuk filter bar
+    // Hapus genre
+    $$("[data-remove-id]", app).forEach((b) => {
+      b.onclick = () => {
+        const removeId = b.dataset.removeId;
+        const remain = activeGenres.filter((g) => g.genreId !== removeId).map((g) => g.genreId);
+        if (!remain.length) location.hash = "#/genres";
+        else location.hash = `#/genre/${enc(remain.join(","))}?mode=${mode}`;
+      };
+    });
+
+    // Tambah genre drawer toggle
+    const drawer = $("#genrePickerDrawer");
+    const toggleBtn = $("#toggleAddGenreBtn");
+    if (toggleBtn && drawer) {
+      toggleBtn.onclick = () => {
+        drawer.hidden = !drawer.hidden;
+        toggleBtn.setAttribute("aria-expanded", !drawer.hidden);
+      };
+      $$("[data-add-id]", drawer).forEach((b) => {
+        b.onclick = () => {
+          const addId = b.dataset.addId;
+          if (activeGenres.some((g) => g.genreId === addId)) return;
+          const nextIds = [...activeGenres.map((g) => g.genreId), addId];
+          location.hash = `#/genre/${enc(nextIds.join(","))}?mode=${mode}`;
+        };
+      });
+    }
+
+    // Switch mode AND/OR
+    $$("[data-set-mode]", app).forEach((b) => {
+      b.onclick = () => {
+        const nextMode = b.dataset.setMode;
+        const ids = activeGenres.map((g) => g.genreId).join(",");
+        location.hash = `#/genre/${enc(ids)}?mode=${nextMode}`;
+      };
+    });
+
+    // Fetching data
+    if (!isMulti) {
+      // Single genre
+      const singleId = activeGenres[0].genreId;
+      const res = await api(`/genre/${enc(singleId)}?page=${page}`);
+      const list = res.data?.animeList || [];
+      $(".grid", app).outerHTML = list.length
+        ? `<div class="grid">${list.map((a) => card(a, { sub: [a.season, a.studios].filter(Boolean).join(" · ") })).join("")}</div>`
+        : emptyBox("Belum ada judul", "Genre ini kosong di sumber.");
+      $(".page", app).insertAdjacentHTML("beforeend", pager(res.pagination, `#/genre/${enc(singleId)}`));
+      hydrate();
+    } else {
+      // Multi genre
+      // Ambil hal 1 & hal 2 dari genre-genre yang dipilih secara paralel
+      const fetches = [];
+      activeGenres.slice(0, 4).forEach((g) => {
+        fetches.push(api(`/genre/${enc(g.genreId)}?page=1`, { quiet: true }).catch(() => null));
+        fetches.push(api(`/genre/${enc(g.genreId)}?page=2`, { quiet: true }).catch(() => null));
+      });
+      const responses = await Promise.all(fetches);
+
+      const animeMap = new Map();
+      responses.forEach((res) => {
+        (res?.data?.animeList || []).forEach((a) => {
+          if (!animeMap.has(a.animeId)) animeMap.set(a.animeId, a);
+        });
+      });
+      const pool = [...animeMap.values()];
+      const reqNorms = new Set(activeGenres.map((g) => norm(g.genreId)));
+
+      let matched = [];
+      if (mode === "and") {
+        matched = pool.filter((a) => {
+          const aGenres = new Set((a.genreList || []).map((g) => norm(g.genreId || g.title)));
+          return [...reqNorms].every((id) => aGenres.has(id));
+        });
+      } else {
+        matched = pool.filter((a) => {
+          const aGenres = new Set((a.genreList || []).map((g) => norm(g.genreId || g.title)));
+          return [...reqNorms].some((id) => aGenres.has(id));
+        }).sort((a, b) => {
+          const gSetA = new Set((a.genreList || []).map((g) => norm(g.genreId || g.title)));
+          const gSetB = new Set((b.genreList || []).map((g) => norm(g.genreId || g.title)));
+          const countA = [...reqNorms].filter((id) => gSetA.has(id)).length;
+          const countB = [...reqNorms].filter((id) => gSetB.has(id)).length;
+          return countB - countA || (parseFloat(b.score) || 0) - (parseFloat(a.score) || 0);
+        });
+      }
+
+      const descEl = $("#genreResultDesc");
+      if (descEl) {
+        descEl.textContent = `${matched.length} judul anime ditemukan (${mode === "and" ? "Memiliki semua genre" : "Memiliki minimal satu genre"})`;
+      }
+
+      if (matched.length) {
+        $(".grid", app).outerHTML = `<div class="grid">${matched.map((a) => {
+          const genresStr = (a.genreList || []).slice(0, 3).map((g) => g.title).join(", ");
+          return card(a, { sub: [a.season || a.studios, genresStr].filter(Boolean).join(" · ") });
+        }).join("")}</div>`;
+      } else {
+        const ids = activeGenres.map((g) => g.genreId).join(",");
+        const switchBtn = mode === "and"
+          ? `<button class="btn btn-primary btn-sm" id="switchOrModeBtn">Coba Mode "Salah Satu (OR)"</button>`
+          : "";
+        $(".grid", app).outerHTML = emptyBox(
+          "Tidak ada anime yang cocok",
+          mode === "and"
+            ? "Belum ditemukan anime yang memiliki semua genre ini sekaligus di katalog awal."
+            : "Tidak ada judul anime yang ditemukan untuk kombinasi ini.",
+          `${switchBtn} <a class="btn btn-secondary btn-sm" href="#/genres">Pilih ulang genre</a>`
+        );
+        const orBtn = $("#switchOrModeBtn");
+        if (orBtn) orBtn.onclick = () => { location.hash = `#/genre/${enc(ids)}?mode=or`; };
+      }
+      hydrate();
+    }
+  }
+
+  async function pageSchedule() {
+    const head = `<div class="page-head"><div><h1 class="page-title">Jadwal <span class="hl">rilis</span></h1><p class="page-desc">Anime ongoing per hari tayang. Aktifkan pengingat agar tidak ketinggalan episode baru.</p></div></div>`;
+    app.innerHTML = `<div class="page">${head}<div class="sched-list">${Array.from({ length: 9 }, () => '<div class="sk" style="height:96px;border-radius:var(--r-xl)"></div>').join("")}</div></div>`;
+
+    const applyPoster = (animeId, posterUrl) => {
+      if (!animeId || !posterUrl) return;
+      setPoster(animeId, posterUrl);
+      $$(`img[data-poster-id="${animeId}"]`, app).forEach((img) => {
+        img.onload = () => {
+          img.classList.add("loaded");
+          const fb = img.nextElementSibling;
+          if (fb?.classList.contains("sched-poster-fallback")) fb.remove();
+        };
+        img.src = posterUrl;
+        if (img.complete && img.naturalWidth > 0) {
+          img.classList.add("loaded");
+          const fb = img.nextElementSibling;
+          if (fb?.classList.contains("sched-poster-fallback")) fb.remove();
+        }
+      });
+    };
+
+    // Pancing poster dari anime ongoing (hal 1 & 2) secara cepat di latar belakang
+    api("/ongoing?page=1", { quiet: true }).then((r) => {
+      (r.data?.animeList || []).forEach((a) => applyPoster(a.animeId, a.poster));
+    }).catch(() => {});
+    api("/ongoing?page=2", { quiet: true }).then((r) => {
+      (r.data?.animeList || []).forEach((a) => applyPoster(a.animeId, a.poster));
+    }).catch(() => {});
+
+    const { data } = await api("/schedule");
+    const days = (Array.isArray(data) ? data : data?.scheduleList || []).map((d) => ({
+      title: d.day || d.title || "",
+      animeList: (d.anime_list || d.animeList || []).map((a) => {
+        const animeId = a.slug || a.animeId;
+        if (a.poster && animeId) setPoster(animeId, a.poster);
+        return {
+          title: a.title,
+          animeId,
+          poster: a.poster || getPoster(animeId) || "",
+          ...a
+        };
+      })
+    }));
+    const today = todayName();
+    let cur = Math.max(0, days.findIndex((d) => norm(d.title) === norm(today)));
+    let showingReminders = false;
+
+    const render = () => {
+      const favIds = new Set(lib.favs().map((f) => f.animeId));
+      const reminderList = lib.reminders();
+      const remindedIds = new Set(reminderList.map((r) => r.animeId));
+
+      let list = [];
+      let currentDayTitle = "";
+
+      if (showingReminders) {
+        currentDayTitle = "Pengingat Saya";
+        list = reminderList;
+      } else {
+        currentDayTitle = days[cur]?.title || "";
+        list = [...(days[cur]?.animeList || [])].sort((a, b) => {
+          const scoreB = (favIds.has(b.animeId) ? 2 : 0) + (remindedIds.has(b.animeId) ? 1 : 0);
+          const scoreA = (favIds.has(a.animeId) ? 2 : 0) + (remindedIds.has(a.animeId) ? 1 : 0);
+          return scoreB - scoreA;
+        });
+      }
+
+      const tabsHtml = `
+        <div class="seg" role="tablist" aria-label="Hari">
+          ${days.map((d, i) => `<button role="tab" aria-selected="${!showingReminders && i === cur}" data-i="${i}"><span class="seg-title">${esc(d.title)}</span> <span class="n">${d.animeList?.length || 0}</span>${norm(d.title) === norm(today) ? ' <span class="tag">Hari ini</span>' : ""}</button>`).join("")}
+          <button role="tab" aria-selected="${showingReminders}" data-tab="reminders">🔔 Pengingat <span class="n">${reminderList.length}</span></button>
+        </div>`;
+
+      let contentHtml = "";
+      if (!list.length) {
+        contentHtml = showingReminders
+          ? emptyBox("Belum ada pengingat", "Tekan ikon lonceng pada kartu anime di jadwal untuk mengaktifkan pengingat rilisnya.", "")
+          : emptyBox("Tidak ada jadwal", "Hari ini kosong.");
+      } else {
+        contentHtml = `<div class="sched-list">${list.map((a, i) => {
+          const isFav = favIds.has(a.animeId);
+          const isReminded = remindedIds.has(a.animeId);
+          const poster = getPoster(a.animeId) || a.poster || "";
+          const dayLabel = showingReminders ? (a.releaseDay || "Jadwal rilis") : currentDayTitle;
+          const initial = (cleanTitle(a.title || "").charAt(0) || "G").toUpperCase();
+
+          return `
+            <div class="sched-item-wrap${isFav ? " fav" : ""}${isReminded ? " reminded" : ""}">
+              <a class="sched-item" href="#/anime/${enc(a.animeId)}">
+                <div class="sched-poster-box">
+                  ${poster
+                    ? `<img class="sched-img loaded" src="${esc(poster)}" alt="Poster ${esc(cleanTitle(a.title))}" loading="lazy" referrerpolicy="no-referrer" />`
+                    : `<img class="sched-img" data-poster-id="${esc(a.animeId)}" alt="Poster ${esc(cleanTitle(a.title))}" loading="lazy" referrerpolicy="no-referrer" /><div class="sched-poster-fallback">${esc(initial)}</div>`
+                  }
+                </div>
+                <div class="sched-info">
+                  <div class="sched-title-wrap">
+                    <span class="sched-n">${isFav ? "★" : String(i + 1).padStart(2, "0")}</span>
+                    <span class="sched-title">${esc(cleanTitle(a.title))}</span>
+                  </div>
+                  <div class="sched-meta">
+                    <span class="sched-day-tag">${esc(dayLabel)}</span>
+                    ${isReminded ? '<span class="sched-remind-tag">🔔 Pengingat aktif</span>' : ''}
+                  </div>
+                </div>
+              </a>
+              <button class="sched-remind-btn" data-remind="${esc(a.animeId)}" aria-pressed="${isReminded}" aria-label="Pengingat untuk ${esc(cleanTitle(a.title))}" title="${isReminded ? "Pengingat aktif (Klik untuk matikan)" : "Aktifkan pengingat rilis"}">
+                ${isReminded ? icon.bellFill : icon.bell}
+              </button>
+            </div>`;
+        }).join("")}</div>`;
+      }
+
+      $(".page", app).innerHTML = `${head}${tabsHtml}${contentHtml}`;
+
+      // Tab navigasi
+      $$(".seg button[data-i]", app).forEach((b) => (b.onclick = () => {
+        showingReminders = false;
+        cur = +b.dataset.i;
+        render();
+        $(`.seg [data-i="${cur}"]`, app)?.focus();
+      }));
+
+      const remTab = $('.seg [data-tab="reminders"]', app);
+      if (remTab) {
+        remTab.onclick = () => {
+          showingReminders = true;
+          render();
+          $('.seg [data-tab="reminders"]', app)?.focus();
+        };
+      }
+
+      const activeTab = $('.seg [aria-selected="true"]', app);
+      if (activeTab) activeTab.parentElement.scrollLeft = activeTab.offsetLeft - 16;
+
+      // Event listener tombol pengingat
+      $$("[data-remind]", app).forEach((b) => {
+        b.onclick = (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const id = b.dataset.remind;
+          const item = list.find((x) => x.animeId === id);
+          if (!item) return;
+          const active = lib.toggleReminder(item, currentDayTitle);
+          b.setAttribute("aria-pressed", active);
+          b.innerHTML = active ? icon.bellFill : icon.bell;
+          b.title = active ? "Pengingat aktif (Klik untuk matikan)" : "Aktifkan pengingat rilis";
+          const wrap = b.closest(".sched-item-wrap");
+          if (wrap) wrap.classList.toggle("reminded", active);
+
+          if (active) {
+            toast(`🔔 Pengingat aktif untuk ${cleanTitle(item.title)}!`);
+          } else {
+            toast(`Pengingat dinonaktifkan untuk ${cleanTitle(item.title)}`);
+            if (showingReminders) render();
+          }
+        };
+      });
+
+      // Fetch gambar poster yang belum ada di cache secara bertahap
+      list.forEach((a) => {
+        if (!getPoster(a.animeId)) {
+          api(`/anime/${enc(a.animeId)}`, { quiet: true }).then((res) => {
+            const p = res.data?.details?.poster || res.data?.poster;
+            if (p) applyPoster(a.animeId, p);
+          }).catch(() => {});
+        }
+      });
+    };
+
+    render();
+  }
+
+  async function pageAnime(id) {
+    app.innerHTML = `<div class="detail-grid"><div class="detail-poster sk"></div><div><div class="sk" style="height:46px;width:70%"></div><div class="sk" style="height:16px;width:40%;margin-top:14px"></div><div class="sk" style="height:64px;margin-top:28px;max-width:760px"></div><div class="sk" style="height:90px;margin-top:20px;max-width:760px"></div></div></div>`;
+    const { data } = await api(`/anime/${enc(id)}`);
+    const d = data.details || data;
+    const eps = realEps(d.episodeList);
+    const seen = lib.seen();
+    const hist = lib.history().find((h) => h.animeId === id);
+    const firstEp = eps[eps.length - 1];
+    const paras = d.synopsis?.paragraphList || [];
+    const meta = { animeId: id, title: d.title, poster: d.poster, score: d.score, episodes: d.episodes };
+    const fav = lib.isFav(id);
+    const reminded = lib.isReminded(id);
+
+    const fact = (k, v, cls = "") => (v ? `<div class="fact ${cls}"><dt>${k}</dt><dd>${esc(v)}</dd></div>` : "");
+    const primary = hist
+      ? `<a class="btn btn-primary" href="#/watch/${enc(hist.episodeId)}">${icon.play} Lanjut episode ${esc(hist.epLabel)}</a>`
+      : firstEp ? `<a class="btn btn-primary" href="#/watch/${enc(firstEp.episodeId)}">${icon.play} Mulai dari episode ${esc(epNum(firstEp.title))}</a>` : "";
+    const secondary = hist && firstEp ? `<a class="btn btn-secondary" href="#/watch/${enc(firstEp.episodeId)}">Dari episode ${esc(epNum(firstEp.title))}</a>` : "";
+
+    app.innerHTML = `
+      <section class="detail-hero" id="detailHero">
+        <div class="detail-bg" style="background-image:url('${esc(d.poster)}')"></div>
+        <div class="detail-video" aria-hidden="true"><div id="dtHost"></div></div>
+        <div class="detail-grid">
+          <div class="detail-poster"><img src="${esc(d.poster)}" alt="Poster ${esc(cleanTitle(d.title))}" referrerpolicy="no-referrer" /></div>
+          <div>
+            <div class="eyebrow">${d.status === "Ongoing" ? '<span class="chip live">Ongoing</span>' : `<span class="chip">${esc(d.status || "Anime")}</span>`}<span>${esc(d.type || "")}</span></div>
+            <h1 class="detail-title">${esc(cleanTitle(d.title))}</h1>
+            ${d.japanese ? `<div class="detail-jp" lang="ja">${esc(d.japanese)}</div>` : ""}
+            <div class="meta">${(d.genreList || []).map((g) => `<a class="chip" href="#/genre/${enc(g.genreId)}">${esc(g.title)}</a>`).join("")}</div>
+            <dl class="facts">
+              ${fact("Skor", d.score, "score")}
+              ${fact("Episode", d.episodes)}
+              ${fact("Durasi", d.duration)}
+              ${fact("Tayang", d.aired)}
+              ${fact("Studio", d.studios)}
+            </dl>
+            ${paras.length ? `<div class="syn clamp" id="syn">${paras.map((p) => `<p>${esc(p)}</p>`).join("")}</div><button class="more" id="synMore" aria-expanded="false">Baca sinopsis lengkap</button>` : ""}
+            <div class="actions" style="margin-top:24px">
+              ${primary}${secondary}
+              <button class="btn btn-secondary" id="trailerBtn" hidden>${icon.film} Tonton trailer</button>
+              <button class="btn btn-secondary" id="favBtn" aria-pressed="${fav}">${icon.bookmark}<span>${fav ? "Tersimpan" : "Simpan"}</span></button>
+              <button class="btn btn-secondary" id="remindBtn" aria-pressed="${reminded}">${reminded ? icon.bellFill : icon.bell}<span>${reminded ? "Pengingat aktif" : "Ingatkan rilis"}</span></button>
+              <button class="icon-btn" id="shareBtn" aria-label="Bagikan">${icon.share}</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div class="body">
+        <section class="section" id="episodes">
+          <div class="sec-head">
+            <h2 class="sec-title">Daftar episode<span class="count">${eps.length}</span></h2>
+            ${eps.length > 12 ? `<div class="ep-tools"><input class="field" id="epFilter" type="search" inputmode="numeric" placeholder="No. episode" aria-label="Cari nomor episode" /><button class="btn btn-quiet btn-sm" id="epSort" aria-label="Balik urutan">Terlama dulu</button></div>` : ""}
+          </div>
+          ${eps.length ? `<div class="ep-grid" id="epGrid"></div>
+            <div class="legend"><span><i></i>Sudah ditonton</span>${hist ? '<span><i class="a"></i>Terakhir ditonton</span>' : ""}</div>`
+            : emptyBox("Belum ada episode", "Episode pertama belum rilis di sumber.")}
+        </section>
+        ${d.recommendedAnimeList?.length ? row("Mirip dengan ini", d.recommendedAnimeList.map((a) => card(a, { foot: [] })).join("")) : ""}
+      </div>`;
+
+    let asc = true;
+    const drawEps = (f = "") => {
+      const g = $("#epGrid");
+      if (!g) return;
+      const list = (asc ? [...eps].reverse() : eps).filter((e) => !f || epNum(e.title).includes(f));
+      const link = (e) => {
+        const cls = hist?.episodeId === e.episodeId ? " seen last" : seen[e.episodeId] ? " seen" : "";
+        return `<a class="ep${cls}" href="#/watch/${enc(e.episodeId)}" aria-label="Episode ${esc(epNum(e.title))}${cls ? ", sudah ditonton" : ""}">${esc(epNum(e.title))}</a>`;
+      };
+      g.innerHTML = list.length
+        ? (f ? list.map(link).join("") : epGaps(list, (e) => epNum(e.title), link))
+        : `<p class="page-desc" style="grid-column:1/-1">Episode ${esc(f)} tidak ada.</p>`;
+    };
+    drawEps();
+    $("#epFilter")?.addEventListener("input", (e) => drawEps(e.target.value.trim()));
+    $("#epSort")?.addEventListener("click", (e) => {
+      asc = !asc;
+      e.currentTarget.textContent = asc ? "Terlama dulu" : "Terbaru dulu";
+      drawEps($("#epFilter").value.trim());
+    });
+    $("#synMore")?.addEventListener("click", (e) => {
+      const clamped = $("#syn").classList.toggle("clamp");
+      e.target.textContent = clamped ? "Baca sinopsis lengkap" : "Ringkas sinopsis";
+      e.target.setAttribute("aria-expanded", !clamped);
+    });
+    const favBtn = $("#favBtn");
+    const setFavUI = (on) => { favBtn.setAttribute("aria-pressed", on); $("span", favBtn).textContent = on ? "Tersimpan" : "Simpan"; };
+    favBtn.onclick = () => {
+      const on = !lib.isFav(id);
+      lib.setFav(meta, on);
+      setFavUI(on);
+      toast(on ? "Disimpan ke Koleksi" : "Dihapus dari Koleksi", on ? null : { label: "Urungkan", fn: () => { lib.setFav(meta, true); setFavUI(true); } });
     };
     const remindBtn = $("#remindBtn");
     if (remindBtn) {
@@ -1805,6 +2225,7 @@ Total output lines: 3485
       const timeout = setTimeout(() => finish(false), 10000);
       iframe.addEventListener("load", () => {
         try {
+          if (iframe.contentWindow?.location.href === "about:blank") return;
           const body = iframe.contentDocument?.body?.innerText?.trim() || "";
           if (/^(?:Gagal memuat video\s*\(\d{3}\)|Proxy error:)/i.test(body)) {
             finish(false);
@@ -3062,4 +3483,3 @@ Total output lines: 3485
     route();
   }
 })();
-
