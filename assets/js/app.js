@@ -186,6 +186,19 @@
   }
   function authErrorMessage(error) {
     const message = String(error?.message || "");
+    const code = String(error?.code || "");
+    if (/email_address_not_authorized|email address not authorized/i.test(`${code} ${message}`)) {
+      return "Supabase belum diatur untuk mengirim email ke alamat ini. Atur Custom SMTP di Supabase, lalu coba daftar lagi.";
+    }
+    if (/over_email_send_rate_limit|email rate limit exceeded/i.test(`${code} ${message}`)) {
+      return "Batas pengiriman email Supabase tercapai. Coba lagi nanti atau atur Custom SMTP.";
+    }
+    if (/signup_disabled|signups not allowed/i.test(`${code} ${message}`)) {
+      return "Pendaftaran sedang dinonaktifkan di Supabase. Aktifkan Allow new users to sign up di pengaturan Auth.";
+    }
+    if (/email_provider_disabled/i.test(`${code} ${message}`)) {
+      return "Login email belum diaktifkan di Supabase. Aktifkan penyedia Email di pengaturan Auth.";
+    }
     if (/invalid login credentials/i.test(message)) return "Email atau kata sandi tidak cocok.";
     if (/already registered|user already exists/i.test(message)) return "Email ini sudah terdaftar. Silakan masuk.";
     if (/password should be at least/i.test(message)) return "Kata sandi harus terdiri dari minimal 8 karakter.";
@@ -558,8 +571,6 @@
           <h2 class="sec-title">${title}${count ? `<span class="count">${count}</span>` : ""}</h2>
           <div class="sec-tools">
             ${link ? `<a class="sec-link" href="${link}">Lihat semua</a>` : ""}
-            <button class="scroll-btn" data-dir="-1" aria-label="Geser kiri" disabled>${icon.prev}</button>
-            <button class="scroll-btn" data-dir="1" aria-label="Geser kanan">${icon.next}</button>
           </div>
         </div>
         <div class="row">${items}</div>
@@ -593,7 +604,7 @@
       </div></div>`;
   }
 
-  // gambar fade-in + fallback, tombol geser baris
+  // gambar fade-in + fallback
   function hydrate(root = app) {
     $$("img[data-src]", root).forEach((img) => {
       img.onload = () => img.classList.add("loaded");
@@ -602,84 +613,6 @@
       img.removeAttribute("data-src");
     });
     $$(".card-img", root).forEach((c) => { if (!$("img", c)) c.classList.add("noimg"); });
-
-    // Aktifkan scroll (drag mouse, roda mouse, dan tombol) untuk SEMUA slide anime
-    $$(".row, .hero-strip", root).forEach((r) => {
-      if (r._hydrated) return;
-      r._hydrated = true;
-
-      const s = r.closest(".section") || r.parentElement;
-      const [l, rt] = s ? $$(".scroll-btn", s) : [];
-
-      const sync = () => {
-        if (l) l.disabled = r.scrollLeft < 4;
-        if (rt) rt.disabled = r.scrollLeft + r.clientWidth >= r.scrollWidth - 4;
-      };
-
-      if (l && rt) {
-        l.onclick = () => r.scrollBy({ left: -r.clientWidth * 0.75, behavior: "smooth" });
-        rt.onclick = () => r.scrollBy({ left: r.clientWidth * 0.75, behavior: "smooth" });
-      }
-
-      r.addEventListener("scroll", sync, { passive: true });
-      requestAnimationFrame(sync);
-
-      // 1. Mouse wheel horizontal scrolling: putar roda mouse untuk geser slide secara mulus
-      r.addEventListener("wheel", (e) => {
-        if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
-          const max = r.scrollWidth - r.clientWidth;
-          const canLeft = e.deltaY < 0 && r.scrollLeft > 0;
-          const canRight = e.deltaY > 0 && r.scrollLeft < max - 1;
-          if (canLeft || canRight) {
-            e.preventDefault();
-            r.scrollLeft += e.deltaY * 1.1;
-          }
-        }
-      }, { passive: false });
-
-      // 2. Drag-to-scroll: klik dan geser slide menggunakan mouse / touch
-      let isDown = false;
-      let startX = 0;
-      let startScroll = 0;
-      let hasDragged = false;
-
-      r.addEventListener("mousedown", (e) => {
-        if (e.button !== 0) return;
-        isDown = true;
-        hasDragged = false;
-        startX = e.pageX - r.offsetLeft;
-        startScroll = r.scrollLeft;
-      });
-
-      const onMouseMove = (e) => {
-        if (!isDown) return;
-        const x = e.pageX - r.offsetLeft;
-        const walk = (x - startX) * 1.3;
-        if (Math.abs(walk) > 4) {
-          hasDragged = true;
-          r.classList.add("dragging");
-        }
-        r.scrollLeft = startScroll - walk;
-      };
-
-      const onMouseUp = () => {
-        if (!isDown) return;
-        isDown = false;
-        r.classList.remove("dragging");
-        setTimeout(() => { hasDragged = false; }, 50);
-      };
-
-      window.addEventListener("mousemove", onMouseMove);
-      window.addEventListener("mouseup", onMouseUp);
-
-      // Mencegah kartu terbuka tanpa sengaja jika pengguna sedang men-drag
-      r.addEventListener("click", (e) => {
-        if (hasDragged) {
-          e.preventDefault();
-          e.stopPropagation();
-        }
-      }, true);
-    });
   }
 
   // ---------- pages ----------
@@ -909,8 +842,6 @@
             </div>
             <div class="sec-tools">
               <a class="sec-link" href="#/library?tab=history">Semua riwayat</a>
-              <button class="scroll-btn" data-dir="-1" aria-label="Geser kiri" disabled>${icon.prev}</button>
-              <button class="scroll-btn" data-dir="1" aria-label="Geser kanan">${icon.next}</button>
             </div>
           </div>
           <div class="row row-continue">${history.slice(0, 10).map((h) => continueCard(h)).join("")}</div>
@@ -924,10 +855,6 @@
                 <span class="badge" style="background:linear-gradient(135deg, #ffd700, #ff8800);color:#000;font-weight:800;border:none;">MINGGU INI</span>
               </h2>
               <p class="sec-sub" style="color:var(--text-3);font-size:13.5px;margin-top:2px;">Anime paling banyak ditonton minggu ini oleh komunitas Gembulnime</p>
-            </div>
-            <div class="sec-tools">
-              <button class="scroll-btn" data-dir="-1" aria-label="Geser kiri" disabled>${icon.prev}</button>
-              <button class="scroll-btn" data-dir="1" aria-label="Geser kanan">${icon.next}</button>
             </div>
           </div>
           <div class="row row-top10">${top10.map((a, i) => rankCard(a, i + 1)).join("")}</div>

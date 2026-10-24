@@ -393,9 +393,10 @@ a.chip:hover { color: #ffffff; border-color: rgba(255, 255, 255, 0.35); backgrou
 .hero-strip {
   width: 100%; max-width: var(--max); margin: 0 auto;
   display: flex; gap: 10px; padding: 0 var(--pad) 12px;
-  overflow-x: auto; scrollbar-width: none;
+  overflow: hidden !important; scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
 }
-.hero-strip::-webkit-scrollbar { display: none; }
+.hero-strip::-webkit-scrollbar { display: none !important; width: 0 !important; height: 0 !important; }
 .hs {
   position: relative; flex: 0 0 auto;
   display: flex; align-items: center; gap: 10px;
@@ -451,49 +452,49 @@ a.chip:hover { color: #ffffff; border-color: rgba(255, 255, 255, 0.35); backgrou
 .sec-link { color: var(--text-2); font-size: 14px; font-weight: 600; padding: 10px 12px; border-radius: var(--r-md); }
 .sec-link:hover { color: var(--text); background: rgba(255, 255, 255, .05); }
 .scroll-btn {
-  width: 36px; height: 36px; border-radius: var(--r-md);
-  display: grid; place-items: center;
-  border: 1px solid var(--line); color: var(--text-2);
-  transition: .15s;
+  display: none !important;
 }
-.scroll-btn:hover { color: var(--text); border-color: var(--line-2); background: var(--surface-2); }
-.scroll-btn:disabled { opacity: .3; pointer-events: none; }
-.scroll-btn svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2.4; }
 
 .row {
-  display: grid; grid-auto-flow: column;
-  grid-auto-columns: clamp(140px, 14vw, 186px);
+  --row-cols: 6;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: calc((100% - (var(--row-cols) - 1) * 16px) / var(--row-cols));
   gap: 16px;
-  overflow-x: auto;
-  overscroll-behavior-x: contain;
-  scroll-behavior: smooth;
+  overflow: hidden !important;
+  overscroll-behavior: none;
+  scroll-behavior: auto;
   padding: 4px 2px 14px;
-  cursor: grab;
-  scrollbar-width: thin;
-  scrollbar-color: var(--surface-3) transparent;
+  cursor: default;
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
 }
 .row.dragging, .row:active {
-  cursor: grabbing;
-  scroll-behavior: auto;
+  cursor: default;
 }
 .row::-webkit-scrollbar {
-  height: 6px;
-  display: block;
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
 }
-.row::-webkit-scrollbar-track {
-  background: rgba(255, 255, 255, .03);
-  border-radius: 6px;
+.split .row {
+  --row-cols: 4;
 }
-.row::-webkit-scrollbar-thumb {
-  background: var(--surface-3);
-  border-radius: 6px;
-  transition: background .2s;
+@media (max-width: 1280px) {
+  .row { --row-cols: 5; }
+  .split .row { --row-cols: 3; }
 }
-.row:hover::-webkit-scrollbar-thumb {
-  background: var(--line-2);
+@media (max-width: 992px) {
+  .row { --row-cols: 4; }
+  .split .row { --row-cols: 3; }
 }
-.row::-webkit-scrollbar-thumb:hover {
-  background: var(--accent);
+@media (max-width: 720px) {
+  .row { --row-cols: 3; gap: 12px; }
+  .split .row { --row-cols: 2; gap: 12px; }
+}
+@media (max-width: 480px) {
+  .row { --row-cols: 2; gap: 10px; }
+  .split .row { --row-cols: 2; gap: 10px; }
 }
 .row img {
   pointer-events: none;
@@ -631,15 +632,38 @@ a.chip:hover { color: #ffffff; border-color: rgba(255, 255, 255, 0.35); backgrou
 
 /* ---------- TOP 10 RANK CARDS (Streamer Chart) ---------- */
 .row-top10 {
-  display: flex; gap: 24px;
-  overflow-x: auto; scroll-behavior: smooth;
+  --top10-cols: 5;
+  display: flex; gap: 20px;
+  overflow: hidden !important;
+  overscroll-behavior: none;
+  scroll-behavior: auto;
   padding: 10px 4px 24px;
-  scrollbar-width: thin;
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+.row-top10::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
 }
 .rank-card-wrap {
-  position: relative; flex: 0 0 auto;
+  position: relative;
+  flex: 0 0 calc((100% - (var(--top10-cols) - 1) * 20px) / var(--top10-cols));
+  min-width: 0;
   display: flex; align-items: flex-end;
   gap: 12px;
+}
+@media (max-width: 1280px) {
+  .row-top10 { --top10-cols: 4; gap: 16px; }
+  .rank-card-wrap { flex: 0 0 calc((100% - (var(--top10-cols) - 1) * 16px) / var(--top10-cols)); gap: 10px; }
+}
+@media (max-width: 900px) {
+  .row-top10 { --top10-cols: 3; gap: 14px; }
+  .rank-card-wrap { flex: 0 0 calc((100% - (var(--top10-cols) - 1) * 14px) / var(--top10-cols)); gap: 8px; }
+}
+@media (max-width: 580px) {
+  .row-top10 { --top10-cols: 2; gap: 12px; }
+  .rank-card-wrap { flex: 0 0 calc((100% - (var(--top10-cols) - 1) * 12px) / var(--top10-cols)); gap: 8px; }
 }
 .rank-number {
   position: relative; flex-shrink: 0;
@@ -671,8 +695,8 @@ a.chip:hover { color: #ffffff; border-color: rgba(255, 255, 255, 0.35); backgrou
   transform: translateY(-4px) scale(1.06);
 }
 .rank-card {
-  width: clamp(140px, 14vw, 186px);
-  flex-shrink: 0;
+  flex: 1 1 0;
+  min-width: 0;
   z-index: 2;
 }
 .badge-rank-top {
@@ -691,14 +715,28 @@ a.chip:hover { color: #ffffff; border-color: rgba(255, 255, 255, 0.35); backgrou
   margin-bottom: 28px;
 }
 .row-continue {
+  --continue-cols: 3;
   display: grid;
   grid-auto-flow: column;
-  grid-auto-columns: clamp(260px, 24vw, 340px);
+  grid-auto-columns: calc((100% - (var(--continue-cols) - 1) * 18px) / var(--continue-cols));
   gap: 18px;
-  overflow-x: auto;
-  scroll-behavior: smooth;
+  overflow: hidden !important;
+  overscroll-behavior: none;
+  scroll-behavior: auto;
   padding: 8px 2px 22px;
-  scrollbar-width: thin;
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+.row-continue::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+@media (max-width: 960px) {
+  .row-continue { --continue-cols: 2; gap: 14px; }
+}
+@media (max-width: 540px) {
+  .row-continue { --continue-cols: 1; }
 }
 .continue-card-wrap {
   position: relative;
@@ -1843,8 +1881,8 @@ body.cinema .cinema-exit { display: inline-flex; }
 }
 @media (max-width: 520px) {
   .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px 12px; }
-  .row { grid-auto-columns: 40vw; gap: 12px; }
-  .row-continue { grid-auto-columns: 80vw; gap: 14px; }
+  .row { --row-cols: 2; gap: 10px; }
+  .row-continue { --continue-cols: 1; gap: 12px; }
   .actions .btn { flex: 1 1 auto; }
   .watch-bar .grp { width: 100%; }
   .watch-bar .grp .btn { flex: 1; }
