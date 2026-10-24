@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="id">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="referrer" content="no-referrer" />
+  <meta name="theme-color" content="#000000" />
+  <title>Gembulnime · Nonton Anime Sub Indo</title>
+  <meta name="description" content="Streaming anime subtitle Indonesia: ongoing, tamat, jadwal rilis, genre, dan baca komik." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Unbounded:wght@600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"
+    rel="stylesheet" />
+  <link rel="stylesheet" href="assets/css/style.css?v=32" />
+  <link rel="icon"
+    href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='10' fill='%23000'/><text x='16' y='22' font-size='18' text-anchor='middle' fill='%23fff' font-family='Arial,sans-serif' font-weight='800'>✦</text></svg>" />
+</head>
+
+<body>
+  <div class="ambient-mesh" aria-hidden="true">
+    <div class="ambient-orb orb-1"></div>
+    <div class="ambient-orb orb-2"></div>
+    <div class="ambient-orb orb-3"></div>
+  </div>
+
+  <a class="skip" href="#app">Lewati ke konten</a>
+  <div class="loadbar" id="loadbar" aria-hidden="true"></div>
+
+  <header class="nav" id="nav">
+    <a href="#/" class="logo" aria-label="Gembulnime, ke beranda">
+      <span class="logo-sparkle" aria-hidden="true">✦</span>
+      <span class="logo-text">GEMBUL.NIME</span>
+    </a>
+    <nav class="nav-links" aria-label="Navigasi utama">
+      <a href="#/" data-route="home">Beranda</a>
+      <a href="#/ongoing" data-route="ongoing">Ongoing</a>
+      <a href="#/completed" data-route="completed">Tamat</a>
+      <a href="#/schedule" data-route="schedule">Jadwal</a>
+      <a href="#/genres" data-route="genres">Genre</a>
+      <a href="#/comic" data-route="comic">Komik</a>
+      <a href="#/library" data-route="library">Koleksi</a>
+    </nav>
+    <div class="nav-right">
+      <form class="search" id="searchForm" role="search" autocomplete="off">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="11" cy="11" r="6.5" />
+          <path d="m16 16 4 4" />
+        </svg>
+        <input id="searchInput" type="search" placeholder="Cari anime, komik..." aria-label="Cari judul anime atau komik" role="combobox"
+          aria-expanded="false" aria-controls="suggest" aria-autocomplete="list" />
+        <span class="search-kbd" id="searchKbdBadge" aria-hidden="true">Ctrl K</span>
+        <div class="suggest" id="suggest" role="listbox" hidden></div>
+      </form>
+      <button class="nav-icon-btn nav-dice-btn" id="btnRandomNav" aria-label="Acak Anime" title="Pilih Anime Acak (Surprise Me!)">
+        <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="3" width="18" height="18" rx="4"/>
+          <circle cx="8" cy="8" r="1.5" fill="currentColor"/>
+          <circle cx="16" cy="8" r="1.5" fill="currentColor"/>
+          <circle cx="12" cy="12" r="1.5" fill="currentColor"/>
+          <circle cx="8" cy="16" r="1.5" fill="currentColor"/>
+          <circle cx="16" cy="16" r="1.5" fill="currentColor"/>
+        </svg>
+      </button>
+      <button class="nav-icon-btn" id="btnCommunity" aria-label="Komunitas" title="Komunitas Gembulnime">
+        <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+        </svg>
+      </button>
+      <button class="nav-icon-btn" id="btnMore" aria-label="Menu lainnya" title="Menu lainnya">
+        <svg viewBox="0 0 24 24" aria-hidden="true" fill="currentColor">
+          <circle cx="12" cy="5" r="1.8"/>
+          <circle cx="12" cy="12" r="1.8"/>
+          <circle cx="12" cy="19" r="1.8"/>
+        </svg>
+      </button>
+      <a href="#/library" class="nav-signin-btn" aria-label="Masuk atau akun koleksi">
+        <svg viewBox="0 0 24 24" aria-hidden="true" fill="currentColor">
+          <path d="M12 2a5 5 0 1 0 5 5 5 5 0 0 0-5-5zm0 12c-5.33 0-8 2.67-8 4v2h16v-2c0-1.33-2.67-4-8-4z"/>
+        </svg>
+        <span>Masuk</span>
+      </a>
+    </div>
+  </header>
+
+  <main id="app" tabindex="-1"></main>
+
+  <!-- Supercharged Command Palette Modal (Ctrl + K) -->
+  <dialog class="cmd-modal" id="cmdModal">
+    <div class="cmd-box">
+      <div class="cmd-header">
+        <svg viewBox="0 0 24 24" class="cmd-ico" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></svg>
+        <input class="cmd-input" id="cmdInput" type="text" placeholder="Ketik judul anime, komik, atau genre..." autocomplete="off" />
+        <button class="cmd-esc" id="cmdClose" aria-label="Tutup pencarian"><kbd>ESC</kbd></button>
+      </div>
+      <div class="cmd-body">
+        <div class="cmd-section" id="cmdTrending">
+          <div class="cmd-label">🔥 Sedang Tren Minggu Ini</div>
+          <div class="cmd-chips">
+            <button class="cmd-chip" data-q="Solo Leveling">Solo Leveling</button>
+            <button class="cmd-chip" data-q="Jujutsu Kaisen">Jujutsu Kaisen</button>
+            <button class="cmd-chip" data-q="One Piece">One Piece</button>
+            <button class="cmd-chip" data-q="Bleach">Bleach</button>
+            <button class="cmd-chip" data-q="Demon Slayer">Demon Slayer</button>
+            <button class="cmd-chip" data-q="Chainsaw Man">Chainsaw Man</button>
+          </div>
+        </div>
+        <div class="cmd-section">
+          <div class="cmd-label">🎲 Mau Nonton yang Beda?</div>
+          <button class="cmd-random-btn" id="cmdRandomBtn">
+            <span class="cmd-dice-ico">🎲</span>
+            <div class="cmd-random-text">
+              <strong>Pilihkan Anime Acak Untuk Saya</strong>
+              <span>Biarkan Gembulnime memilih tontonan seru tanpa bingung</span>
+            </div>
+            <span class="cmd-arrow">→</span>
+          </button>
+        </div>
+        <div class="cmd-results" id="cmdResults" hidden></div>
+      </div>
+    </div>
+  </dialog>
+
+  <footer class="foot">
+    <div class="foot-logo"><span class="logo-sparkle" aria-hidden="true">✦</span> GEMBUL.NIME</div>
+    <p class="foot-desc">Platform streaming anime subtitle Indonesia dan komik gratis dengan visual premium sinematik ala ani.pm.</p>
+    <p class="foot-keys">Pintasan: <kbd>/</kbd> atau <kbd>Ctrl+K</kbd> command search · <kbd>N</kbd> episode berikutnya · <kbd>P</kbd> sebelumnya ·
+      <kbd>T</kbd> mode bioskop
+    </p>
+  </footer>
+
+  <nav class="tabbar" aria-label="Navigasi bawah">
+    <a href="#/" data-route="home"><svg viewBox="0 0 24 24">
+        <path d="M4 10.5 12 4l8 6.5V20h-5.5v-5h-5v5H4z" />
+      </svg>Beranda</a>
+    <a href="#/ongoing" data-route="ongoing"><svg viewBox="0 0 24 24">
+        <rect x="3.5" y="5" width="17" height="12" rx="2" />
+        <path d="M8 20h8" />
+      </svg>Ongoing</a>
+    <a href="#/schedule" data-route="schedule"><svg viewBox="0 0 24 24">
+        <rect x="4" y="5" width="16" height="15" rx="2" />
+        <path d="M4 10h16M9 3v4M15 3v4" />
+      </svg>Jadwal</a>
+    <a href="#/genres" data-route="genres"><svg viewBox="0 0 24 24">
+        <rect x="4" y="4" width="7" height="7" rx="1.5" />
+        <rect x="13" y="4" width="7" height="7" rx="1.5" />
+        <rect x="4" y="13" width="7" height="7" rx="1.5" />
+        <rect x="13" y="13" width="7" height="7" rx="1.5" />
+      </svg>Genre</a>
+    <a href="#/comic" data-route="comic"><svg viewBox="0 0 24 24">
+        <path d="M4 5.5c2.7-1 5.3-1 8 .8 2.7-1.8 5.3-1.8 8-.8V19c-2.7-1-5.3-1-8 .8-2.7-1.8-5.3-1.8-8-.8z" />
+        <path d="M12 6.3v13.5" />
+      </svg>Komik</a>
+    <a href="#/library" data-route="library"><svg viewBox="0 0 24 24">
+        <path d="M6 4h12v16l-6-4-6 4z" />
+      </svg>Koleksi</a>
+  </nav>
+
+  <button class="totop" id="totop" aria-label="Kembali ke atas" hidden>
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="m6 14 6-6 6 6" />
+    </svg>
+  </button>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script src="assets/js/config.js?v=15"></script>
+  <script src="assets/js/app.js?v=32"></script>
+</body>
+
+</html>
