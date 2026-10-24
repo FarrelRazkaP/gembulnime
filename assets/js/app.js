@@ -2216,14 +2216,8 @@
       const iframe = $("iframe", player);
       if (!iframe) { resolve(false); return; }
       let settled = false;
-      const finish = (loaded) => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timeout);
-        resolve(loaded);
-      };
-      const timeout = setTimeout(() => finish(false), 10000);
-      iframe.addEventListener("load", () => {
+      let timeout;
+      const onLoad = () => {
         try {
           if (iframe.contentWindow?.location.href === "about:blank") return;
           const body = iframe.contentDocument?.body?.innerText?.trim() || "";
@@ -2233,8 +2227,19 @@
           }
         } catch { /* Embed lintas domain: isi frame tidak bisa diperiksa. */ }
         finish(true);
-      }, { once: true });
-      iframe.addEventListener("error", () => finish(false), { once: true });
+      };
+      const onError = () => finish(false);
+      const finish = (loaded) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        iframe.removeEventListener("load", onLoad);
+        iframe.removeEventListener("error", onError);
+        resolve(loaded);
+      };
+      timeout = setTimeout(() => finish(false), 10000);
+      iframe.addEventListener("load", onLoad);
+      iframe.addEventListener("error", onError);
     });
     const srvButtons = $$(".srv", app);
     const playServer = async (b) => {
