@@ -335,11 +335,18 @@
   };
   const cleanTitle = (s) => String(s ?? "").replace(/\s*subtitle indonesia\s*$/i, "").trim();
 
-  // ---------- poster cache ----------
+  // ---------- poster cache & HD enhancer ----------
+  const isHdUrl = (url) => typeof url === "string" && (
+    url.includes("anilist.co") ||
+    (url.includes("samehadaku.how/wp-content/uploads/") && !url.includes("300x") && !url.includes("150x") && !url.includes("214x")) ||
+    url.includes("cdn.myanimelist.net")
+  );
   const posterCache = store.get("posters", {});
+  const hdCache = store.get("hd_posters", {});
   const getPoster = (id) => posterCache[id] || "";
   const setPoster = (id, url) => {
     if (!id || !url || posterCache[id] === url) return;
+    if (isHdUrl(posterCache[id]) && !isHdUrl(url)) return;
     posterCache[id] = url;
     store.set("posters", posterCache);
   };
@@ -461,7 +468,10 @@
 
   // ---------- components ----------
   function card(a, opts = {}) {
-    if (a.animeId && a.poster) setPoster(a.animeId, a.poster);
+    const titleKey = norm(a.title);
+    const cachedPoster = (a.animeId && getPoster(a.animeId)) || hdCache[titleKey];
+    const posterUrl = (cachedPoster && isHdUrl(cachedPoster)) ? cachedPoster : (a.poster || "");
+    if (a.animeId && posterUrl) setPoster(a.animeId, posterUrl);
     const score = cleanScore(a.score);
     const ep = opts.epLabel ?? (a.episodes && a.episodes !== "Unknown" ? a.episodes : "");
     const badge = opts.badge ?? (ep ? `EP ${ep}` : ""); // komik memakai "CH 12"
@@ -472,8 +482,8 @@
     const peekable = a.animeId && !isOp(a.animeId);
     const inner = `
       <a class="card" href="${href}"${peekable ? ` data-anime="${esc(a.animeId)}"` : ""}>
-        <div class="card-img">
-          <img data-src="${esc(a.poster)}" alt="" loading="lazy" referrerpolicy="no-referrer" />
+        <div class="card-img" data-title="${esc(cleanTitle(a.title))}">
+          <img data-src="${esc(posterUrl)}" alt="" loading="lazy" referrerpolicy="no-referrer" />
           <div class="card-top">
             ${badge ? `<span class="badge badge-ep">${esc(badge)}</span>` : "<span></span>"}
             ${score && score !== "0" && !opts.removable ? `<span class="badge star">★ ${esc(score)}</span>` : ""}
@@ -578,9 +588,96 @@
       img.onload = () => img.classList.add("loaded");
       img.onerror = () => { img.remove(); };
       img.src = img.dataset.src;
+      if (img.complete && img.naturalWidth > 0) img.classList.add("loaded");
       img.removeAttribute("data-src");
     });
     $$(".card-img", root).forEach((c) => { if (!$("img", c)) c.classList.add("noimg"); });
+    enrichCardsWithHd(root);
+  }
+
+  // ---------- HD Cover Enhancer (AniList GraphQL batched) ----------
+  const pendingHdQueries = new Map();
+  let hdBatchTimer = null;
+
+  function cleanSearchTitle(s) {
+    return cleanTitle(s)
+      .replace(/\(\d{4}\)|☆/g, " ")
+      .replace(/\b(season|part|s)\s*\d+\b|\b\d+(st|nd|rd|th)\s+season\b/gi, " ")
+      .replace(/\s{2,}/g, " ")
+      .trim();
+  }
+
+  function enrichCardsWithHd(root = app) {
+    const cards = $$(".card", root);
+    cards.forEach((c) => {
+      const img = $("img", c);
+      if (!img) return;
+      const title = $(".card-title", c)?.textContent || $(".card-img", c)?.dataset.title;
+      if (!title) return;
+      const key = norm(title);
+      const cached = hdCache[key] || (c.dataset.anime && getPoster(c.dataset.anime));
+      if (cached && isHdUrl(cached)) {
+        if (img.dataset.src) img.dataset.src = cached;
+        if (img.src && img.src !== cached) {
+          img.src = cached;
+        }
+        return;
+      }
+      const curSrc = img.dataset.src || img.src || "";
+      if (!isHdUrl(curSrc)) {
+        if (!pendingHdQueries.has(title)) pendingHdQueries.set(title, []);
+        pendingHdQueries.get(title).push({ img, animeId: c.dataset.anime || "" });
+      }
+    });
+
+    if (!pendingHdQueries.size) return;
+    clearTimeout(hdBatchTimer);
+    hdBatchTimer = setTimeout(flushHdQueue, 80);
+  }
+
+  async function flushHdQueue() {
+    if (!pendingHdQueries.size) return;
+    const batch = Array.from(pendingHdQueries.entries()).slice(0, 10);
+    for (const [title] of batch) pendingHdQueries.delete(title);
+
+    const cleanBatch = batch.map(([rawTitle, items]) => {
+      const s = cleanSearchTitle(rawTitle);
+      return { rawTitle, searchTitle: s || rawTitle, items };
+    });
+
+    const fields = cleanBatch.map((b, i) =>
+      `a${i}: Page(perPage: 1) { media(search: ${JSON.stringify(b.searchTitle)}, type: ANIME) { coverImage { extraLarge large } } }`
+    ).join("\n");
+
+    try {
+      const res = await fetch("https://graphql.anilist.co", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ query: `query {\n${fields}\n}` })
+      }).then((r) => r.json());
+
+      cleanBatch.forEach((b, i) => {
+        const cover = res.data?.[`a${i}`]?.media?.[0]?.coverImage;
+        const hdUrl = cover?.extraLarge || cover?.large;
+        if (hdUrl) {
+          const key = norm(b.rawTitle);
+          hdCache[key] = hdUrl;
+          store.set("hd_posters", hdCache);
+          b.items.forEach(({ img, animeId }) => {
+            if (animeId) setPoster(animeId, hdUrl);
+            if (img && img.isConnected && img.src !== hdUrl) {
+              img.classList.remove("loaded");
+              img.src = hdUrl;
+              img.onload = () => img.classList.add("loaded");
+            }
+          });
+        }
+      });
+    } catch {}
+
+    if (pendingHdQueries.size > 0) {
+      setTimeout(flushHdQueue, 150);
+    }
   }
 
   // ---------- pages ----------

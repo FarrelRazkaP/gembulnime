@@ -493,6 +493,7 @@ a.chip:hover { color: #ffffff; border-color: rgba(255, 255, 255, 0.35); backgrou
 .card-img img {
   width: 100%; height: 100%; object-fit: cover;
   opacity: 0; transition: opacity .35s, transform .45s var(--ease);
+  image-rendering: -webkit-optimize-contrast;
 }
 .card-img img.loaded { opacity: 1; }
 .card-img.noimg::before { content: "✦"; position: absolute; inset: 0; display: grid; place-items: center; font: 700 36px var(--body); color: rgba(255,255,255,0.15); }
