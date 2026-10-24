@@ -1626,7 +1626,7 @@ a.chip:hover { color: #ffffff; border-color: rgba(255, 255, 255, 0.35); backgrou
 }
 .field:focus { border-color: var(--text-3); }
 .field::placeholder { color: var(--text-3); }
-.auth-page { min-height: min(72vh, 760px); display: grid; place-items: center; padding-top: 44px; padding-bottom: 64px; }
+.auth-page { min-height: min(72vh, 760px); display: grid; place-items: center; padding-top: clamp(150px, 18vh, 168px); padding-bottom: 64px; }
 .auth-panel { width: min(100%, 440px); padding: clamp(22px, 5vw, 38px); border: 1px solid var(--line); border-radius: var(--r-xl); background: var(--surface); }
 .auth-kicker { color: var(--text-3); font-size: 11px; font-weight: 800; letter-spacing: .12em; margin-bottom: 14px; }
 .auth-panel .page-title { font-size: clamp(27px, 5vw, 36px); }
